@@ -74,7 +74,10 @@ module ActsAsTenant
           unless a == reflect_on_association(tenant) || a.macro != :belongs_to || a.options[:polymorphic]
             association_class =  a.options[:class_name].nil? ? a.name.to_s.classify.constantize : a.options[:class_name].constantize
             validates_each a.foreign_key.to_sym do |record, attr, value|
-              record.errors.add attr, "association is invalid [ActsAsTenant]" unless value.nil? || association_class.where(:id => value).present?
+              rel = record.send(a.foreign_key.gsub('_id',''))
+              assoc_tenant = rel.send(fkey) rescue nil
+              same_tenant = assoc_tenant == ActsAsTenant.current_tenant.id
+              record.errors.add attr, "association is invalid [ActsAsTenant]" unless value.nil? || same_tenant || assoc_tenant.nil? || association_class.where(:id => value).present?
             end
           end
         end
@@ -107,7 +110,6 @@ module ActsAsTenant
       def validates_uniqueness_to_tenant(fields, args ={})
         raise ActsAsTenant::Errors::ModelNotScopedByTenant unless respond_to?(:scoped_by_tenant?)
         fkey = reflect_on_association(ActsAsTenant.tenant_klass).foreign_key
-        #tenant_id = lambda { "#{ActsAsTenant.fkey}"}.call
         if args[:scope]
           args[:scope] = Array(args[:scope]) << fkey
         else
